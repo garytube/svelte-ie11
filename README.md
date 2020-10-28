@@ -1,9 +1,30 @@
 # svelte-ie11
-Svelte JS  Rollup Config for IE11 Support
 
+Svelte JS Rollup Config for IE11 Support via `rollup-plugin-babel `
 
-### Add Dependencies
-`npm i rollup-plugin-babel -D`
+#### Fetch Support
+
+```js
+// src/main.js
+import App from './App.svelte'
+import 'whatwg-fetch' // fetch polyfill for IE 11
+
+export default new App({
+  target: document.body,
+})
+```
+
+#### Config
+
+You can disable IE11 Support via ``rollup.config.js`
+
+```js
+...
+const legacySupport = true // enable for IE11 Support
+...
+```
+
+#### Dependencies
 
 ```
   "dependencies": {
