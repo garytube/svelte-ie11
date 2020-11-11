@@ -3986,6 +3986,10 @@ var app = (function () {
 	  return Object.keys(obj).length === 0;
 	}
 
+	function append(target, node) {
+	  target.appendChild(node);
+	}
+
 	function insert(target, node, anchor) {
 	  target.insertBefore(node, anchor || null);
 	}
@@ -3998,8 +4002,31 @@ var app = (function () {
 	  return document.createElement(name);
 	}
 
+	function text(data) {
+	  return document.createTextNode(data);
+	}
+
+	function space() {
+	  return text(' ');
+	}
+
+	function listen(node, event, handler, options) {
+	  node.addEventListener(event, handler, options);
+	  return function () {
+	    return node.removeEventListener(event, handler, options);
+	  };
+	}
+
+	function attr(node, attribute, value) {
+	  if (value == null) node.removeAttribute(attribute);else if (node.getAttribute(attribute) !== value) node.setAttribute(attribute, value);
+	}
+
 	function children(element) {
 	  return Array.from(element.childNodes);
+	}
+
+	function toggle_class(element, name, toggle) {
+	  element.classList[toggle ? 'add' : 'remove'](name);
 	}
 
 	function custom_event(type, detail) {
@@ -4092,12 +4119,35 @@ var app = (function () {
 	}
 
 	var outroing = new Set();
+	var outros;
 
 	function transition_in(block, local) {
 	  if (block && block.i) {
 	    outroing.delete(block);
 	    block.i(local);
 	  }
+	}
+
+	function transition_out(block, local, detach, callback) {
+	  if (block && block.o) {
+	    if (outroing.has(block)) return;
+	    outroing.add(block);
+	    outros.c.push(function () {
+	      outroing.delete(block);
+
+	      if (callback) {
+	        if (detach) block.d(1);
+	        callback();
+	      }
+	    });
+	    block.o(local);
+	  }
+	}
+
+	var globals = typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : global;
+
+	function create_component(block) {
+	  block && block.c();
 	}
 
 	function mount_component(component, target, anchor) {
@@ -4248,6 +4298,14 @@ var app = (function () {
 	  }, detail)));
 	}
 
+	function append_dev(target, node) {
+	  dispatch_dev('SvelteDOMInsert', {
+	    target: target,
+	    node: node
+	  });
+	  append(target, node);
+	}
+
 	function insert_dev(target, node, anchor) {
 	  dispatch_dev('SvelteDOMInsert', {
 	    target: target,
@@ -4262,6 +4320,50 @@ var app = (function () {
 	    node: node
 	  });
 	  detach(node);
+	}
+
+	function listen_dev(node, event, handler, options, has_prevent_default, has_stop_propagation) {
+	  var modifiers = options === true ? ['capture'] : options ? Array.from(Object.keys(options)) : [];
+	  if (has_prevent_default) modifiers.push('preventDefault');
+	  if (has_stop_propagation) modifiers.push('stopPropagation');
+	  dispatch_dev('SvelteDOMAddEventListener', {
+	    node: node,
+	    event: event,
+	    handler: handler,
+	    modifiers: modifiers
+	  });
+	  var dispose = listen(node, event, handler, options);
+	  return function () {
+	    dispatch_dev('SvelteDOMRemoveEventListener', {
+	      node: node,
+	      event: event,
+	      handler: handler,
+	      modifiers: modifiers
+	    });
+	    dispose();
+	  };
+	}
+
+	function attr_dev(node, attribute, value) {
+	  attr(node, attribute, value);
+	  if (value == null) dispatch_dev('SvelteDOMRemoveAttribute', {
+	    node: node,
+	    attribute: attribute
+	  });else dispatch_dev('SvelteDOMSetAttribute', {
+	    node: node,
+	    attribute: attribute,
+	    value: value
+	  });
+	}
+
+	function set_data_dev(text, data) {
+	  data = '' + data;
+	  if (text.wholeText === data) return;
+	  dispatch_dev('SvelteDOMSetData', {
+	    node: text,
+	    data: data
+	  });
+	  text.data = data;
 	}
 
 	function validate_slots(name, slot, keys) {
@@ -4309,30 +4411,136 @@ var app = (function () {
 	  return SvelteComponentDev;
 	}(SvelteComponent);
 
+	var $includes = arrayIncludes.includes;
+
+
+
+	var USES_TO_LENGTH$6 = arrayMethodUsesToLength('indexOf', { ACCESSORS: true, 1: 0 });
+
+	// `Array.prototype.includes` method
+	// https://tc39.github.io/ecma262/#sec-array.prototype.includes
+	_export({ target: 'Array', proto: true, forced: !USES_TO_LENGTH$6 }, {
+	  includes: function includes(el /* , fromIndex = 0 */) {
+	    return $includes(this, el, arguments.length > 1 ? arguments[1] : undefined);
+	  }
+	});
+
+	// https://tc39.github.io/ecma262/#sec-array.prototype-@@unscopables
+	addToUnscopables('includes');
+
+	var notARegexp = function (it) {
+	  if (isRegexp(it)) {
+	    throw TypeError("The method doesn't accept regular expressions");
+	  } return it;
+	};
+
+	var MATCH$1 = wellKnownSymbol('match');
+
+	var correctIsRegexpLogic = function (METHOD_NAME) {
+	  var regexp = /./;
+	  try {
+	    '/./'[METHOD_NAME](regexp);
+	  } catch (error1) {
+	    try {
+	      regexp[MATCH$1] = false;
+	      return '/./'[METHOD_NAME](regexp);
+	    } catch (error2) { /* empty */ }
+	  } return false;
+	};
+
+	// `String.prototype.includes` method
+	// https://tc39.github.io/ecma262/#sec-string.prototype.includes
+	_export({ target: 'String', proto: true, forced: !correctIsRegexpLogic('includes') }, {
+	  includes: function includes(searchString /* , position = 0 */) {
+	    return !!~String(requireObjectCoercible(this))
+	      .indexOf(notARegexp(searchString), arguments.length > 1 ? arguments[1] : undefined);
+	  }
+	});
+
+	function _arrayWithHoles(arr) {
+	  if (Array.isArray(arr)) return arr;
+	}
+
+	function _iterableToArrayLimit(arr, i) {
+	  if (typeof Symbol === "undefined" || !(Symbol.iterator in Object(arr))) return;
+	  var _arr = [];
+	  var _n = true;
+	  var _d = false;
+	  var _e = undefined;
+
+	  try {
+	    for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) {
+	      _arr.push(_s.value);
+
+	      if (i && _arr.length === i) break;
+	    }
+	  } catch (err) {
+	    _d = true;
+	    _e = err;
+	  } finally {
+	    try {
+	      if (!_n && _i["return"] != null) _i["return"]();
+	    } finally {
+	      if (_d) throw _e;
+	    }
+	  }
+
+	  return _arr;
+	}
+
+	function _nonIterableRest() {
+	  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+	}
+
+	function _slicedToArray(arr, i) {
+	  return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
+	}
+
 	function _createSuper$1(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$1(); return function _createSuperInternal() { var Super = _getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = _getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return _possibleConstructorReturn(this, result); }; }
 
 	function _isNativeReflectConstruct$1() { if (typeof Reflect === "undefined" || !Reflect.construct) return false; if (Reflect.construct.sham) return false; if (typeof Proxy === "function") return true; try { Date.prototype.toString.call(Reflect.construct(Date, [], function () {})); return true; } catch (e) { return false; } }
-	var file = "src\\App.svelte";
+	var console_1 = globals.console;
+	var file = "src\\example\\BasicImage.svelte";
 
 	function create_fragment(ctx) {
-	  var main;
+	  var img;
+	  var img_src_value;
 	  var block = {
 	    c: function create() {
-	      main = element("main");
-	      main.textContent = "hello IE 11";
-	      add_location(main, file, 7, 0, 43);
+	      img = element("img");
+	      if (img.src !== (img_src_value =
+	      /*src*/
+	      ctx[0])) attr_dev(img, "src", img_src_value);
+	      attr_dev(img, "alt",
+	      /*alt*/
+	      ctx[1]);
+	      toggle_class(img, "active",
+	      /*active*/
+	      ctx[2]);
+	      add_location(img, file, 9, 0, 192);
 	    },
 	    l: function claim(nodes) {
 	      throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
 	    },
 	    m: function mount(target, anchor) {
-	      insert_dev(target, main, anchor);
+	      insert_dev(target, img, anchor);
 	    },
-	    p: noop,
+	    p: function update(ctx, _ref) {
+	      var _ref2 = _slicedToArray(_ref, 1),
+	          dirty = _ref2[0];
+
+	      if (dirty &
+	      /*active*/
+	      4) {
+	        toggle_class(img, "active",
+	        /*active*/
+	        ctx[2]);
+	      }
+	    },
 	    i: noop,
 	    o: noop,
 	    d: function destroy(detaching) {
-	      if (detaching) detach_dev(main);
+	      if (detaching) detach_dev(img);
 	    }
 	  };
 	  dispatch_dev("SvelteRegisterBlock", {
@@ -4345,7 +4553,369 @@ var app = (function () {
 	  return block;
 	}
 
-	function instance($$self, $$props) {
+	function instance($$self, $$props, $$invalidate) {
+	  var _$$props$$$slots = $$props.$$slots,
+	      slots = _$$props$$$slots === void 0 ? {} : _$$props$$$slots,
+	      $$scope = $$props.$$scope;
+	  validate_slots("BasicImage", slots, []);
+	  var image = $$props.image,
+	      activeCondition = $$props.activeCondition;
+	  var src = image.src;
+	  var alt = image.alt;
+	  var active = activeCondition();
+	  console.log(image);
+	  console.log(active);
+	  var writable_props = ["image", "activeCondition"];
+	  Object.keys($$props).forEach(function (key) {
+	    if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console_1.warn("<BasicImage> was created with unknown prop '".concat(key, "'"));
+	  });
+
+	  $$self.$$set = function ($$props) {
+	    if ("image" in $$props) $$invalidate(3, image = $$props.image);
+	    if ("activeCondition" in $$props) $$invalidate(4, activeCondition = $$props.activeCondition);
+	  };
+
+	  $$self.$capture_state = function () {
+	    return {
+	      image: image,
+	      activeCondition: activeCondition,
+	      src: src,
+	      alt: alt,
+	      active: active
+	    };
+	  };
+
+	  $$self.$inject_state = function ($$props) {
+	    if ("image" in $$props) $$invalidate(3, image = $$props.image);
+	    if ("activeCondition" in $$props) $$invalidate(4, activeCondition = $$props.activeCondition);
+	  };
+
+	  if ($$props && "$$inject" in $$props) {
+	    $$self.$inject_state($$props.$$inject);
+	  }
+
+	  return [src, alt, active, image, activeCondition];
+	}
+
+	var BasicImage = /*#__PURE__*/function (_SvelteComponentDev) {
+	  _inherits(BasicImage, _SvelteComponentDev);
+
+	  var _super = _createSuper$1(BasicImage);
+
+	  function BasicImage(options) {
+	    var _this;
+
+	    _classCallCheck(this, BasicImage);
+
+	    _this = _super.call(this, options);
+	    init(_assertThisInitialized(_this), options, instance, create_fragment, safe_not_equal, {
+	      image: 3,
+	      activeCondition: 4
+	    });
+	    dispatch_dev("SvelteRegisterComponent", {
+	      component: _assertThisInitialized(_this),
+	      tagName: "BasicImage",
+	      options: options,
+	      id: create_fragment.name
+	    });
+	    var ctx = _this.$$.ctx;
+	    var props = options.props || {};
+
+	    if (
+	    /*image*/
+	    ctx[3] === undefined && !("image" in props)) {
+	      console_1.warn("<BasicImage> was created without expected prop 'image'");
+	    }
+
+	    if (
+	    /*activeCondition*/
+	    ctx[4] === undefined && !("activeCondition" in props)) {
+	      console_1.warn("<BasicImage> was created without expected prop 'activeCondition'");
+	    }
+
+	    return _this;
+	  }
+
+	  _createClass(BasicImage, [{
+	    key: "image",
+	    get: function get() {
+	      throw new Error("<BasicImage>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+	    },
+	    set: function set(value) {
+	      throw new Error("<BasicImage>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+	    }
+	  }, {
+	    key: "activeCondition",
+	    get: function get() {
+	      throw new Error("<BasicImage>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+	    },
+	    set: function set(value) {
+	      throw new Error("<BasicImage>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+	    }
+	  }]);
+
+	  return BasicImage;
+	}(SvelteComponentDev);
+
+	function _createSuper$2(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$2(); return function _createSuperInternal() { var Super = _getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = _getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return _possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$2() { if (typeof Reflect === "undefined" || !Reflect.construct) return false; if (Reflect.construct.sham) return false; if (typeof Proxy === "function") return true; try { Date.prototype.toString.call(Reflect.construct(Date, [], function () {})); return true; } catch (e) { return false; } }
+	var console_1$1 = globals.console;
+	var file$1 = "src\\example\\Basic.svelte";
+
+	function create_fragment$1(ctx) {
+	  var fieldset;
+	  var figure;
+	  var t1;
+	  var basicimage;
+	  var t2;
+	  var button;
+	  var t3;
+	  var t4;
+	  var t5;
+	  var p;
+	  var current;
+	  var mounted;
+	  var dispose;
+	  basicimage = new BasicImage({
+	    props: {
+	      image:
+	      /*image*/
+	      ctx[1],
+	      activeCondition:
+	      /*func*/
+	      ctx[5]
+	    },
+	    $$inline: true
+	  });
+	  var block = {
+	    c: function create() {
+	      fieldset = element("fieldset");
+	      figure = element("figure");
+	      figure.textContent = "".concat(title);
+	      t1 = space();
+	      create_component(basicimage.$$.fragment);
+	      t2 = space();
+	      button = element("button");
+	      t3 = text("clicked ");
+	      t4 = text(
+	      /*count*/
+	      ctx[0]);
+	      t5 = space();
+	      p = element("p");
+	      add_location(figure, file$1, 31, 4, 621);
+	      add_location(button, file$1, 35, 4, 733);
+	      add_location(p, file$1, 40, 4, 821);
+	      add_location(fieldset, file$1, 30, 0, 605);
+	    },
+	    l: function claim(nodes) {
+	      throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+	    },
+	    m: function mount(target, anchor) {
+	      insert_dev(target, fieldset, anchor);
+	      append_dev(fieldset, figure);
+	      append_dev(fieldset, t1);
+	      mount_component(basicimage, fieldset, null);
+	      append_dev(fieldset, t2);
+	      append_dev(fieldset, button);
+	      append_dev(button, t3);
+	      append_dev(button, t4);
+	      append_dev(fieldset, t5);
+	      append_dev(fieldset, p);
+	      p.innerHTML =
+	      /*htmlDirective*/
+	      ctx[4];
+	      current = true;
+
+	      if (!mounted) {
+	        dispose = listen_dev(button, "click",
+	        /*handleClick*/
+	        ctx[3], false, false, false);
+	        mounted = true;
+	      }
+	    },
+	    p: function update(ctx, _ref) {
+	      var _ref2 = _slicedToArray(_ref, 1),
+	          dirty = _ref2[0];
+
+	      if (!current || dirty &
+	      /*count*/
+	      1) set_data_dev(t4,
+	      /*count*/
+	      ctx[0]);
+	    },
+	    i: function intro(local) {
+	      if (current) return;
+	      transition_in(basicimage.$$.fragment, local);
+	      current = true;
+	    },
+	    o: function outro(local) {
+	      transition_out(basicimage.$$.fragment, local);
+	      current = false;
+	    },
+	    d: function destroy(detaching) {
+	      if (detaching) detach_dev(fieldset);
+	      destroy_component(basicimage);
+	      mounted = false;
+	      dispose();
+	    }
+	  };
+	  dispatch_dev("SvelteRegisterBlock", {
+	    block: block,
+	    id: create_fragment$1.name,
+	    type: "component",
+	    source: "",
+	    ctx: ctx
+	  });
+	  return block;
+	}
+
+	var title = "Basic Usages";
+
+	function instance$1($$self, $$props, $$invalidate) {
+	  var _$$props$$$slots = $$props.$$slots,
+	      slots = _$$props$$$slots === void 0 ? {} : _$$props$$$slots,
+	      $$scope = $$props.$$scope;
+	  validate_slots("Basic", slots, []);
+	  var image = {
+	    src: "https://active.thesaracen.com/img/banner/image/0/edd57fd9b06b654fc2461612734f5c44.jpg",
+	    alt: "SARACEN LOGO"
+	  };
+
+	  var isSaracenActive = function isSaracenActive(src) {
+	    return src.includes("thesaracen.com");
+	  };
+
+	  var count = 1;
+
+	  var handleClick = function handleClick() {
+	    $$invalidate(0, count += 1);
+	  };
+
+	  var htmlDirective = "<span class=\"active\">".concat(count, " x 2 = ").concat(doubled, "</span>");
+	  var writable_props = [];
+	  Object.keys($$props).forEach(function (key) {
+	    if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console_1$1.warn("<Basic> was created with unknown prop '".concat(key, "'"));
+	  });
+
+	  var func = function func() {
+	    return isSaracenActive(image.src);
+	  };
+
+	  $$self.$capture_state = function () {
+	    return {
+	      BasicImage: BasicImage,
+	      title: title,
+	      image: image,
+	      isSaracenActive: isSaracenActive,
+	      count: count,
+	      handleClick: handleClick,
+	      htmlDirective: htmlDirective,
+	      doubled: doubled
+	    };
+	  };
+
+	  $$self.$inject_state = function ($$props) {
+	    if ("image" in $$props) $$invalidate(1, image = $$props.image);
+	    if ("count" in $$props) $$invalidate(0, count = $$props.count);
+	    if ("doubled" in $$props) doubled = $$props.doubled;
+	  };
+
+	  var doubled;
+
+	  if ($$props && "$$inject" in $$props) {
+	    $$self.$inject_state($$props.$$inject);
+	  }
+
+	  $$self.$$.update = function () {
+	    if ($$self.$$.dirty &
+	    /*count*/
+	    1) {
+	       doubled = count * 2;
+	    }
+
+	    if ($$self.$$.dirty &
+	    /*count*/
+	    1) {
+	       if (count >= 5) {
+	        console.log("$: statement is label.");
+	      }
+	    }
+	  };
+
+	  return [count, image, isSaracenActive, handleClick, htmlDirective, func];
+	}
+
+	var Basic = /*#__PURE__*/function (_SvelteComponentDev) {
+	  _inherits(Basic, _SvelteComponentDev);
+
+	  var _super = _createSuper$2(Basic);
+
+	  function Basic(options) {
+	    var _this;
+
+	    _classCallCheck(this, Basic);
+
+	    _this = _super.call(this, options);
+	    init(_assertThisInitialized(_this), options, instance$1, create_fragment$1, safe_not_equal, {});
+	    dispatch_dev("SvelteRegisterComponent", {
+	      component: _assertThisInitialized(_this),
+	      tagName: "Basic",
+	      options: options,
+	      id: create_fragment$1.name
+	    });
+	    return _this;
+	  }
+
+	  return Basic;
+	}(SvelteComponentDev);
+
+	function _createSuper$3(Derived) { var hasNativeReflectConstruct = _isNativeReflectConstruct$3(); return function _createSuperInternal() { var Super = _getPrototypeOf(Derived), result; if (hasNativeReflectConstruct) { var NewTarget = _getPrototypeOf(this).constructor; result = Reflect.construct(Super, arguments, NewTarget); } else { result = Super.apply(this, arguments); } return _possibleConstructorReturn(this, result); }; }
+
+	function _isNativeReflectConstruct$3() { if (typeof Reflect === "undefined" || !Reflect.construct) return false; if (Reflect.construct.sham) return false; if (typeof Proxy === "function") return true; try { Date.prototype.toString.call(Reflect.construct(Date, [], function () {})); return true; } catch (e) { return false; } }
+
+	function create_fragment$2(ctx) {
+	  var basic;
+	  var current;
+	  basic = new Basic({
+	    $$inline: true
+	  });
+	  var block = {
+	    c: function create() {
+	      create_component(basic.$$.fragment);
+	    },
+	    l: function claim(nodes) {
+	      throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+	    },
+	    m: function mount(target, anchor) {
+	      mount_component(basic, target, anchor);
+	      current = true;
+	    },
+	    p: noop,
+	    i: function intro(local) {
+	      if (current) return;
+	      transition_in(basic.$$.fragment, local);
+	      current = true;
+	    },
+	    o: function outro(local) {
+	      transition_out(basic.$$.fragment, local);
+	      current = false;
+	    },
+	    d: function destroy(detaching) {
+	      destroy_component(basic, detaching);
+	    }
+	  };
+	  dispatch_dev("SvelteRegisterBlock", {
+	    block: block,
+	    id: create_fragment$2.name,
+	    type: "component",
+	    source: "",
+	    ctx: ctx
+	  });
+	  return block;
+	}
+
+	function instance$2($$self, $$props, $$invalidate) {
 	  var _$$props$$$slots = $$props.$$slots,
 	      slots = _$$props$$$slots === void 0 ? {} : _$$props$$$slots,
 	      $$scope = $$props.$$scope;
@@ -4354,13 +4924,20 @@ var app = (function () {
 	  Object.keys($$props).forEach(function (key) {
 	    if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn("<App> was created with unknown prop '".concat(key, "'"));
 	  });
+
+	  $$self.$capture_state = function () {
+	    return {
+	      Basic: Basic
+	    };
+	  };
+
 	  return [];
 	}
 
 	var App = /*#__PURE__*/function (_SvelteComponentDev) {
 	  _inherits(App, _SvelteComponentDev);
 
-	  var _super = _createSuper$1(App);
+	  var _super = _createSuper$3(App);
 
 	  function App(options) {
 	    var _this;
@@ -4368,12 +4945,12 @@ var app = (function () {
 	    _classCallCheck(this, App);
 
 	    _this = _super.call(this, options);
-	    init(_assertThisInitialized(_this), options, instance, create_fragment, safe_not_equal, {});
+	    init(_assertThisInitialized(_this), options, instance$2, create_fragment$2, safe_not_equal, {});
 	    dispatch_dev("SvelteRegisterComponent", {
 	      component: _assertThisInitialized(_this),
 	      tagName: "App",
 	      options: options,
-	      id: create_fragment.name
+	      id: create_fragment$2.name
 	    });
 	    return _this;
 	  }
@@ -5326,7 +5903,7 @@ var app = (function () {
 	  $forEach$2(aTypedArray$7(this), callbackfn, arguments.length > 1 ? arguments[1] : undefined);
 	});
 
-	var $includes = arrayIncludes.includes;
+	var $includes$1 = arrayIncludes.includes;
 
 	var aTypedArray$8 = arrayBufferViewCore.aTypedArray;
 	var exportTypedArrayMethod$8 = arrayBufferViewCore.exportTypedArrayMethod;
@@ -5334,7 +5911,7 @@ var app = (function () {
 	// `%TypedArray%.prototype.includes` method
 	// https://tc39.github.io/ecma262/#sec-%typedarray%.prototype.includes
 	exportTypedArrayMethod$8('includes', function includes(searchElement /* , fromIndex */) {
-	  return $includes(aTypedArray$8(this), searchElement, arguments.length > 1 ? arguments[1] : undefined);
+	  return $includes$1(aTypedArray$8(this), searchElement, arguments.length > 1 ? arguments[1] : undefined);
 	});
 
 	var $indexOf$1 = arrayIncludes.indexOf;
@@ -5397,8 +5974,8 @@ var app = (function () {
 	var NEGATIVE_ZERO$1 = !!nativeLastIndexOf && 1 / [1].lastIndexOf(1, -0) < 0;
 	var STRICT_METHOD$3 = arrayMethodIsStrict('lastIndexOf');
 	// For preventing possible almost infinite loop in non-standard implementations, test the forward version of the method
-	var USES_TO_LENGTH$6 = arrayMethodUsesToLength('indexOf', { ACCESSORS: true, 1: 0 });
-	var FORCED$3 = NEGATIVE_ZERO$1 || !STRICT_METHOD$3 || !USES_TO_LENGTH$6;
+	var USES_TO_LENGTH$7 = arrayMethodUsesToLength('indexOf', { ACCESSORS: true, 1: 0 });
+	var FORCED$3 = NEGATIVE_ZERO$1 || !STRICT_METHOD$3 || !USES_TO_LENGTH$7;
 
 	// `Array.prototype.lastIndexOf` method implementation
 	// https://tc39.github.io/ecma262/#sec-array.prototype.lastindexof

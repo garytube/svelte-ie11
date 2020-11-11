@@ -1,8 +1,12 @@
 {
   "version": 3,
   "file": "bundle.css",
-  "sources": [],
-  "sourcesContent": [],
+  "sources": [
+    "App.svelte"
+  ],
+  "sourcesContent": [
+    "<script>\n  import Basic from './example/Basic.svelte'\n</script>\n\n<style>\n    :global(.active) {\n        color: red;\n    }\n    :global(img.active) {\n        border: red 3px solid;\n    }\n    :global(figure) {\n        background: #ccc;\n    }\n</style>\n\n<Basic/>"
+  ],
   "names": [],
-  "mappings": ""
+  "mappings": "AAKY,OAAO,AAAE,CAAC,AACd,KAAK,CAAE,GAAG,AACd,CAAC,AACO,UAAU,AAAE,CAAC,AACjB,MAAM,CAAE,GAAG,CAAC,GAAG,CAAC,KAAK,AACzB,CAAC,AACO,MAAM,AAAE,CAAC,AACb,UAAU,CAAE,IAAI,AACpB,CAAC"
 }
