@@ -27,15 +27,25 @@ const legacySupport = true // enable for IE11 Support
 #### Dependencies
 
 ```
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^17.0.0",
+    "@rollup/plugin-node-resolve": "^11.0.0",
+    "rollup": "^2.39.0",
+    "rollup-plugin-css-only": "^3.1.0",
+    "rollup-plugin-livereload": "^2.0.0",
+    "rollup-plugin-svelte": "^7.1.0",
+    "rollup-plugin-terser": "^7.0.2",
+    "svelte": "^3.32.3"
+  },
   "dependencies": {
-    "@babel/core": "^7.8.0",
-    "@babel/plugin-syntax-dynamic-import": "^7.8.0",
-    "@babel/plugin-transform-runtime": "^7.8.0",
-    "@babel/preset-env": "^7.8.2",
-    "@babel/runtime": "^7.8.0",
+    "@babel/core": "^7.12.17",
+    "@babel/plugin-syntax-dynamic-import": "^7.8.3",
+    "@babel/plugin-transform-runtime": "^7.12.17",
+    "@babel/preset-env": "^7.12.17",
+    "@babel/runtime": "^7.12.18",
     "core-js": "3",
     "rollup-plugin-babel": "^4.3.3",
-    "sirv-cli": "^0.4.4",
-    "whatwg-fetch": "^3.0.0"
+    "sirv-cli": "^1.0.11",
+    "whatwg-fetch": "^3.6.1"
   }
 ```
