@@ -1,6 +1,7 @@
-# svelte-ie11
+# svelte IE11  and FETCH Support
 
 Svelte JS Rollup Config for IE11 Support via `rollup-plugin-babel `
+Also allow support for Async/Await Syntax. Usefuell if your App needs to run on some sort of embeded Systems.
 
 #### Fetch Support
 
